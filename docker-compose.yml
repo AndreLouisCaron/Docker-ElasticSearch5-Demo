@@ -1,0 +1,54 @@
+# -*- coding: utf-8 -*-
+
+version: '2'
+
+services:
+  # Centralize logs.
+  elasticsearch:
+    image: "docker.elastic.co/elasticsearch/elasticsearch:5.4.3"
+    environment:
+      cluster.name: "docker-cluster"
+      bootstrap.memory_lock: "true"
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    mem_limit: "1g"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "9200"
+
+  # Enable browsing for centralized logs.
+  kibana:
+    image: "kibana:5.4.3"
+    ports:
+      - "5601"
+    links:
+      - elasticsearch
+
+  # Forward Docker container logs to ElasticSearch.
+  fluentd:
+    build:
+      context: "./docker/fluentd/"
+      args:
+        http_proxy: "${HTTP_PROXY}"
+        https_proxy: "${HTTPS_PROXY}"
+        no_proxy: "${no_proxy}"
+    volumes:
+      - "./docker/fluentd:/fluentd/etc"
+    ports:
+      - "24225:24224"
+    links:
+      - elasticsearch
+
+  app:
+    image: "python:3.5"
+    command: "python -c 'print(\"hello, world!\")'"
+    links:
+      - fluentd
+    logging:
+      driver: "fluentd"
+      options:
+        fluentd-address: "127.0.0.1:24225"
+        tag: "docker.{{.Name}}"
